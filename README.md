@@ -42,6 +42,6 @@ For help run "./mcanime2mal.py --help":
 
 ## Requirements
 
-python >= 2.7 < 3 
-BeatifulSoup4
+* python >= 2.7 < 3 
+* BeatifulSoup4
 
