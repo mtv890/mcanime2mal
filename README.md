@@ -40,8 +40,7 @@ For help run "./mcanime2mal.py --help":
       -a TYPE|TITLE, --animekey TYPE|TITLE
                             Change a particular anime from cache.
 
-# Requirements
-==============
+## Requirements
 
 python >= 2.7 < 3 
 BeatifulSoup4
