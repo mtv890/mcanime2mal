@@ -1,6 +1,7 @@
 #!/bin/python2
 import requests
 import json
+import re
 from bs4 import BeautifulSoup
 from urlparse import urljoin
 from urllib import quote
@@ -35,7 +36,7 @@ args = parser.parse_args()
 
 # Globals
 
-URL = 'http://kronos.mcanime.net/perfil/' + args.profile_number + '/listaanime/'
+URL = 'http://www.mcanime.net/perfil/' + args.profile_number + '/lista/anime'
 anime_status = {"Watching":'W',
                 "Completed":'C',
                 "On-Hold":'H',
@@ -84,20 +85,70 @@ def find_getch():
 
 getch = find_getch()
 
+
+
 def get_mcanime_list(status, animelist):
-    response = requests.get(URL + anime_status[status])
-    soup = BeautifulSoup(response.content)
-    titles = [ i.get_text(strip=True) for i in soup.select(".series-title > a") ]
-    faved = [ True if i.img is not None else False for i in soup.select(".series-row > div:nth-of-type(3)") ][1:]
-    punt = [ i.get_text(strip=True) for i in soup.select(".series-row > div:nth-of-type(4)") ][1:]
-    tipo = [ i.get_text(strip=True) for i in soup.select(".series-row > div:nth-of-type(5)") ][1:]
-    progress = [ i.get_text(strip=True) for i in soup.select(".series-row > div:nth-of-type(6)") ][1:]
+    response = requests.get(URL)
+    soup = BeautifulSoup(response.content, "html.parser")
+    titles = [ i.get_text(strip=True) for i in soup.select("form > .dd_row.anime_list > li.dd_title > h5 > a") ]
+    faved = [ True if i.find(class_="favorite") is not None else False for i in soup.select("form > .dd_row.anime_list") ]
+    punt = [ i.get_text(strip=True) for i in soup.select("form > .dd_row.anime_list > li.rating ul.unit_rating  li.current_rating") ]
+    tipo = [ i.get_text(strip=True) for i in soup.select("form > .dd_row.anime_list > li.dd_title > h5 > i") ]
+    current_status = []
+    this_status = ''
+    for i in soup.select("#content form"):
+        for j in i:
+            if 'La abandone' in str(j):
+                this_status = 'A'
+            elif 'La quiero ver' in str(j):
+                this_status = 'D'
+            elif 'La deje de ver temporalmente' in str(j):
+                this_status = 'H'
+            elif 'La estoy viendo' in str(j):
+                this_status = 'W'
+            elif 'La vi completa' in str(j):
+                this_status = 'C'
+            
+            if "dd_row anime_list" in str(j):
+                current_status += [this_status]
+
+    totals = []
+    print 'Bringing total episode numbers... it takes a LOT of time...'
+    for i in soup.select("form > .dd_row.anime_list"):
+        animeURL = 'http://www.mcanime.net' + i.find('a').get('href')
+        req = requests.get(animeURL)
+        anime_soup = str(BeautifulSoup(req.content, "html.parser").select("#content"))
+        page = re.search(re.compile('(<b>Episodios:<\/b> )[0-9]+'), anime_soup)
+        if page is not None:
+            page = page.group(0).replace('<b>Episodios:</b> ','')
+        else:
+            page = '1'
+        totals += [page]
+        print '.'
+    print "Finish bringing total episode numbers..."        
+
+
+
+    # MCAnime v1.0 do not Show this data, so i override it with "1"
     for idx,title in enumerate(titles):
-        watched = progress[idx].split('/')[0].replace('-','0')
-        total = progress[idx].split('/')[1].replace('-','1')
-        if anime_status[status] == 'C' and watched < total:
+        punt[idx] = punt[idx].split('/')[0].replace('Rating: ','')
+        tipo[idx] = tipo[idx].replace('(','').replace(')','')
+        watched = totals[idx] 
+        total = totals[idx] 
+
+        #still need to fix this, using position in tables
+        if current_status[idx] == 'C': 
             watched = total
-        tipo[idx]= correct_type[tipo[idx]]
+        elif current_status[idx] == 'A':
+            watched = '1'
+        elif current_status[idx] == 'D':
+            watched = '0'
+        elif current_status[idx] == 'H':
+            watched = '1'
+        elif current_status[idx] == 'W':
+            watched = '1'
+
+        tipo[idx] = correct_type[tipo[idx]]
         punt = [ "" if p == "-" else p for p in punt ]
         animekey = title+'|'+tipo[idx]
 
@@ -138,7 +189,7 @@ def get_mal_info(title, anime_info, force_selection=False):
     title_normalized = title.encode('ascii', 'ignore')
     title_quoted = quote(title_normalized)
     response = requests.get('http://myanimelist.net/api/anime/search.xml?q='+title_quoted, auth=(args.user, args.password))
-    soup = BeautifulSoup(response.content)
+    soup = BeautifulSoup(response.content, "html.parser")
     if anime_info["type"] == 'Web':
         types = ['TV','ONA']
     else:
@@ -156,7 +207,6 @@ def get_mal_info(title, anime_info, force_selection=False):
                 "id": filtered_animes[0].id.get_text(),
                 "title": filtered_animes[0].title.get_text(),
                 "type": filtered_animes[0].type.get_text()}
-
     else:
         selected = get_selection(animes)
         if selected == "search":
@@ -171,7 +221,7 @@ def get_mal_info(title, anime_info, force_selection=False):
             anime_info["mal_anime_entry"] = selected
             if "passed" in anime_info:
                 del anime_info["passed"]
-
+    print "----------------------------------"
     return anime_info
 
 def get_selection(animes, start_idx=0):
@@ -260,13 +310,10 @@ else:
     animelist = {}
 
 if not args.cache:
-    for s in anime_status:
-        animelist = get_mcanime_list(s, animelist)
+    animelist = get_mcanime_list(s, animelist)
 
 if args.animekey != None:
-    #print args.animekey
     animelist[args.animekey] = get_mal_info(animelist[args.animekey]["title"], animelist[args.animekey])
 
 animelist = get_animes(animelist)
 generate_xml(animelist)
-
