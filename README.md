@@ -42,6 +42,7 @@ For help run "./mcanime2mal.py --help":
 
 ## Requirements
 
-* python >= 2.7 < 3 
-* BeatifulSoup4
+* python >= 2.7 < 3  ---> Download it from here https://www.python.org/downloads/
+* BeautifulSoup4     ---> `pip install beautifulsoup4`
+* requests           ---> `pip install requests`
 
