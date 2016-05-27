@@ -85,9 +85,7 @@ def find_getch():
 
 getch = find_getch()
 
-
-
-def get_mcanime_list(status, animelist):
+def get_mcanime_list(animelist):
     response = requests.get(URL)
     soup = BeautifulSoup(response.content, "html.parser")
     titles = [ i.get_text(strip=True) for i in soup.select("form > .dd_row.anime_list > li.dd_title > h5 > a") ]
@@ -111,7 +109,9 @@ def get_mcanime_list(status, animelist):
             
             if "dd_row anime_list" in str(j):
                 current_status += [this_status]
-
+    
+    # MCAnime v1.0 do not Show "watched/total" data, so i need to make request to all anime pages to bring
+    # total number of chapters and i overrrided (inveted) watched number... sry about that :(
     totals = []
     print 'Bringing total episode numbers... it takes a LOT of time...'
     for i in soup.select("form > .dd_row.anime_list"):
@@ -121,22 +121,25 @@ def get_mcanime_list(status, animelist):
         page = re.search(re.compile('(<b>Episodios:<\/b> )[0-9]+'), anime_soup)
         if page is not None:
             page = page.group(0).replace('<b>Episodios:</b> ','')
-        else:
-            page = '1'
+        else: # probabliy redirect to naruho.do
+            page = re.search(re.compile('(<strong>Cantidad de Episodios:<\/strong> )[0-9]+'), anime_soup)
+            if page is None: # ok, is not naruho.do, just don't tell. Overrided to 1
+                page = '1'
+            else:
+               page = page.group(0).replace('<strong>Cantidad de Episodios:<\/strong> ','') 
         totals += [page]
         print '.'
     print "Finish bringing total episode numbers..."        
 
-
-
-    # MCAnime v1.0 do not Show this data, so i override it with "1"
     for idx,title in enumerate(titles):
         punt[idx] = punt[idx].split('/')[0].replace('Rating: ','')
         tipo[idx] = tipo[idx].replace('(','').replace(')','')
-        watched = totals[idx] 
         total = totals[idx] 
+        watched = totals[idx] 
 
-        #still need to fix this, using position in tables
+        # Completed = total
+        # Dropped = Watching, Dropped or Hold On = 1
+        # Not Started = 0 
         if current_status[idx] == 'C': 
             watched = total
         elif current_status[idx] == 'A':
@@ -160,7 +163,7 @@ def get_mcanime_list(status, animelist):
         animelist[animekey]['type']= tipo[idx]
         animelist[animekey]['score']= punt[idx]
         animelist[animekey]['favorite']= faved[idx]
-        animelist[animekey]['status']= status
+        animelist[animekey]['status']= current_status[idx]
 
     cache_file = open(args.cache_file, 'w')
     cache_file.truncate()
@@ -310,7 +313,7 @@ else:
     animelist = {}
 
 if not args.cache:
-    animelist = get_mcanime_list(s, animelist)
+    animelist = get_mcanime_list(animelist)
 
 if args.animekey != None:
     animelist[args.animekey] = get_mal_info(animelist[args.animekey]["title"], animelist[args.animekey])
